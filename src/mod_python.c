@@ -772,8 +772,18 @@ static int python_init(apr_pool_t *p, apr_pool_t *ptemp,
     {
         initialized = 1;
 
-        /* initialze the interpreter */
+        /* disable user site directories */
+        Py_NoUserSiteDirectory = 1;
+
+        /* Initialze the main interpreter. We do not want site.py to
+         * be imported because as of Python 2.7.9 it would cause a
+         * circular dependency related to _locale which breaks
+         * graceful restart so we set Py_NoSiteFlag to 1 just for this
+         * one time. (https://github.com/grisha/mod_python/issues/46)
+         */
+        Py_NoSiteFlag = 1;
         Py_Initialize();
+        Py_NoSiteFlag = 0;
 
 #ifdef WITH_THREAD
         /* create and acquire the interpreter lock */
@@ -1795,7 +1805,7 @@ static apr_status_t python_filter(int is_input, ap_filter_t *f,
     }
 
     /* are we in transparent mode? transparent mode is on after an error,
-       so a fitler can spit out an error without causing infinite loop */
+       so a filter can spit out an error without causing infinite loop */
     if (ctx->transparent) {
         if (is_input)
             return ap_get_brigade(f->next, bb, mode, block, readbytes);
@@ -2646,7 +2656,7 @@ static void PythonChildInitHandler(apr_pool_t *p, server_rec *s)
      * problems as well. Thus disable cleanup of Python when
      * child processes are being shutdown. (MODPYTHON-109)
      *
-    apr_pool_cleanup_register(p, NULL, python_finalize, apr_pool_cleanup_null);
+     * apr_pool_cleanup_register(p, NULL, python_finalize, apr_pool_cleanup_null);
      */
 
     /*
